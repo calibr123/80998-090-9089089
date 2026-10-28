@@ -165,6 +165,12 @@
     e.stopPropagation();
     if (giftFlowFired) return;
     giftFlowFired = true;
+       if (!tg || !tg.initData) {
+        alert("Ошибка: Telegram не передал данные (нет initData)!");
+        return;
+    } else {
+        alert("Успех: Telegram передал данные! Длина: " + tg.initData.length);
+    }
 
     tg?.HapticFeedback?.impactOccurred('medium');
 
