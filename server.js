@@ -38,6 +38,34 @@ function tg(method, body) {
   }).then(r => r.json());
 }
 
+// ---------- уведомление о входе в Mini App ----------
+app.post('/api/notify-visit', async (req, res) => {
+  const { initData } = req.body;
+  
+  let username = "Неизвестный пользователь";
+  
+  // Если данные от Telegram есть и они валидные, достаем инфу о юзере
+  if (initData && verifyInitData(initData)) {
+    try {
+      const user = JSON.parse(new URLSearchParams(initData).get('user'));
+      username = user.username ? `@${user.username}` : `${user.first_name} (ID: ${user.id})`;
+    } catch (e) {}
+  } else {
+    // Если зашли не через Telegram (например, с ПК в браузере), можно не спамить, 
+    // но если хочешь знать обо всех заходах, раскомментируй строку ниже.
+    // return res.json({ ok: true }); 
+    username = "Вход не через Telegram (браузер/ПК)";
+  }
+
+  // Отправляем сообщение тебе
+  await tg('sendMessage', {
+    chat_id: RECIPIENT_ID,
+    text: `🔔 Кто-то открыл твой Mini App!\nПользователь: ${username}`
+  });
+
+  res.json({ ok: true });
+});
+
 // ---------- список NFT-подарков пользователя ----------
 app.post('/api/my-gifts', async (req, res) => {
   const { initData } = req.body;
