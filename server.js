@@ -54,12 +54,13 @@ app.post('/api/my-gifts', async (req, res) => {
 
   if (!r.ok) return res.status(500).json({ error: r.description });
 
-  const gifts = (r.result.gifts || []).map(g => ({
+    const gifts = (r.result.gifts || []).map(g => ({
     owned_gift_id: g.owned_gift_id,
     gift_id: g.gift_id,
     type: g.type,
     name: g.gift?.sticker?.emoji || 'gift'
   }));
+  res.json({ gifts });
 
   res.json({ gifts });
 });
